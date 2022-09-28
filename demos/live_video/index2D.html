@@ -1,0 +1,284 @@
+<!-- Copyright 2021 Google LLC. All Rights Reserved.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================-->
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1.0, user-scalable=no">
+  <style>
+    body {
+      margin: 0;
+    }
+
+    #stats {
+      position: relative;
+      width: 100%;
+      height: 80px;
+    }
+
+    #main {
+      position: relative;
+      margin: 0;
+    }
+
+    .container {
+      position: absolute;
+    }
+
+    #canvas-wrapper,
+    #scatter-gl-container {
+      position: relative;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="stats"></div>
+  <div id="main">
+    <div class="container">
+      <div class="canvas-wrapper">
+        <canvas id="output"></canvas>
+        <video id="video" playsinline style="
+          -webkit-transform: scaleX(-1);
+          transform: scaleX(-1);
+          visibility: hidden;
+          width: auto;
+          height: auto;
+          ">
+        </video>
+      </div>
+      <div id="scatter-gl-container" style="display: none"></div>
+    </div>
+  </div>
+</body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.6/dat.gui.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stats.js/r16/Stats.min.js"></script>
+<script src="src/index2d.js"></script>
+
+
+<script type="module">
+  window.keypoints = null;
+  // Find the latest version by visiting https://unpkg.com/three. The URL will
+  // redirect to the newest stable release.
+  import * as THREE from 'https://unpkg.com/three@0.119.1/build/three.module.js';
+  import { GLTFLoader } from "https://unpkg.com/three@0.119.1/examples/jsm/loaders/GLTFLoader.js";
+  import { OrbitControls } from 'https://unpkg.com/three@0.119.1/examples/jsm/controls/OrbitControls.js';  /*
+	Three.js "tutorials by example"
+	Author: Lee Stemkoski
+	Date: July 2013 (three.js v59dev)
+ */
+
+  // MAIN
+
+  // standard global variables
+  let camera, scene, renderer, clock;
+  let rightArm, rightElbow, rightHand;
+  let leftArm, leftElbow, leftHand;
+  let a = -0.1;
+  init();
+  animate();
+
+  function init() {
+
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 10);
+    camera.position.set(2, 2, - 2);
+
+    clock = new THREE.Clock();
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff);
+
+    const light = new THREE.HemisphereLight(0xbbbbff, 0x444422);
+    light.position.set(0, 1, 0);
+    scene.add(light);
+
+    // model
+    const loader = new GLTFLoader();
+    loader.load('https://threejs.org/examples/models/gltf/Soldier.glb', function (gltf) {
+
+      const model = gltf.scene;
+      model.traverse((obj) => {
+        console.log(obj)
+      })
+
+
+      //right arm
+      rightArm = model.getObjectByName('mixamorigRightArm');
+      rightElbow = model.getObjectByName('mixamorigRightForeArm');
+      rightHand = model.getObjectByName('mixamorigRightHand');
+
+      //left arm
+      leftArm = model.getObjectByName('mixamorigLeftArm');
+      leftElbow = model.getObjectByName('mixamorigLeftForeArm');
+      leftHand = model.getObjectByName('mixamorigLeftHand');
+
+      scene.add(model);
+
+    });
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.gammaOutput = true;
+    renderer.gammaFactor = 2.2;
+    document.body.appendChild(renderer.domElement);
+
+    window.addEventListener('resize', onWindowResize, false);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1, 0);
+    controls.update();
+
+  }
+
+  function onWindowResize() {
+
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+  }
+
+
+
+  function animate() {
+
+    requestAnimationFrame(animate);
+
+    const t = clock.getElapsedTime();
+    // rightArm.rotation.z = window.a || 0;
+    // rightArm.rotation.y = window.b || 0;
+    // console.log( rightArm.rotation) 
+    if (keypoints != null) {
+      let left_elbow,   // 手肘关节
+        left_shoulder,   // 手肩膀关节
+        left_wrist,  // 手腕关节
+        right_elbow,
+        right_wrist,
+        right_shoulder;
+      keypoints.forEach(element => {
+        if (element.name === 'left_elbow') {
+          left_elbow = element
+        }
+        if (element.name === 'left_shoulder') {
+          left_shoulder = element
+        }
+        if (element.name === 'left_wrist') {
+          left_wrist = element
+        }
+        if (element.name === 'right_elbow') {
+          right_elbow = element
+        }
+        if (element.name === 'right_wrist') {
+          right_wrist = element
+        }
+        if (element.name === 'right_shoulder') {
+          right_shoulder = element
+        }
+
+      });
+
+
+      if (rightArm) {
+        if (rightElbow) {
+          if (left_elbow.score > 0.80) {
+            if (left_shoulder.score > 0.80) {
+              let diagX = left_elbow.x - left_shoulder.x;
+              let diagY = left_elbow.y - left_shoulder.y;
+              let oula = Math.atan(diagY / diagX);
+              if (diagY > 0 && diagX > 0) {
+
+              } else if (diagY < 0 && diagX > 0) {
+                oula += 2 * Math.PI;
+              } else if (diagY < 0 && diagX < 0) {
+                oula += Math.PI;
+              } else if (diagY > 0 && diagX < 0) {
+                oula += Math.PI;
+              }
+ 
+              rightArm.rotation.z = oula;
+
+            }
+
+            if (rightHand) {
+              if (left_wrist.score > 0.80) {
+                let diagX = left_wrist.x - left_elbow.x;
+                let diagY = left_wrist.y - left_elbow.y;
+                let oula = Math.atan(diagY / diagX);
+                if (diagY > 0 && diagX > 0) {
+
+                } else if (diagY < 0 && diagX > 0) {
+                  oula += 2 * Math.PI;
+                } else if (diagY < 0 && diagX < 0) {
+                  oula += Math.PI;
+                } else if (diagY > 0 && diagX < 0) {
+                  oula += Math.PI;
+                }
+                rightElbow.rotation.z = oula -    rightArm.rotation.z ;
+              }
+            }
+          }
+        }
+      }
+
+      leftArm.rotation.z  = window.a || 0;
+      if (leftArm) {
+        if (leftElbow) {
+          if (right_elbow.score > 0.80) {
+            if (right_shoulder.score > 0.80) {
+              let diagX = right_elbow.x - right_shoulder.x;
+              let diagY = right_elbow.y - right_shoulder.y;
+              let oula = Math.atan(diagY / diagX);
+                if (diagY > 0 && diagX > 0) {
+                  oula =  Math.PI - oula;
+                } else if (diagY < 0 && diagX > 0) {
+                  oula =  Math.PI - oula;
+                } else if (diagY < 0 && diagX < 0) {
+                  oula = 2 * Math.PI - oula;
+                } else if (diagY > 0 && diagX < 0) {
+                  oula = -oula;
+                }
+
+              leftArm.rotation.z = oula;
+            }
+
+            if (leftHand) {
+              if (right_wrist.score > 0.80) {
+                let diagX = right_wrist.x - right_elbow.x;
+                let diagY = right_wrist.y - right_elbow.y;
+                let oula = Math.atan(diagY / diagX);
+                if (diagY > 0 && diagX > 0) {
+                  oula =  Math.PI - oula;
+                } else if (diagY < 0 && diagX > 0) {
+                  oula =  Math.PI - oula;
+                } else if (diagY < 0 && diagX < 0) {
+                  oula = 2 * Math.PI - oula;
+                } else if (diagY > 0 && diagX < 0) {
+                  oula = -oula;
+                }
+
+                leftElbow.rotation.z = oula -  leftArm.rotation.z;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    renderer.render(scene, camera);
+
+  }
+</script>
+
+</html>
